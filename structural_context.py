@@ -454,34 +454,44 @@ class StructuralEngine:
     
     def _count_violations(self, tl: TrendLine, df: pd.DataFrame, trend_type: str) -> int:
         """
-        نظام التسامح — كم مرة اخترق السعر الترند
+        نظام التسامح — كم موجة كسر حدثت (لا كم شمعة)
         
-        مثل الكود الأصلي:
-            method getHighsAbovePrice / getLowsBelowPrice
+        الفرق جوهري:
+        الحوت يصطاد السيولة — يكسر الترند 5 شموع ثم يعود
+        هذا اختراق واحد لا خمسة
         
-        ترند صاعد: نعد كم مرة low أقل من سعر الترند
-        ترند هابط: نعد كم مرة high أعلى من سعر الترند
+        موجة الكسر = دخول تحت/فوق الترند ثم عودة
+        10 شموع متتالية تحت الترند = موجة واحدة
+        عاد فوقه ثم كسر مرة أخرى = موجتان
+        
+        هذا أقرب لواقع السوق من عدّ الشموع
         """
-        violations = 0
+        waves = 0
         start_bar = tl.start.index
         end_bar = len(df) - self.except_last_bars
         
         if start_bar >= end_bar:
             return 0
         
+        in_violation = False  # هل نحن داخل موجة كسر الآن؟
+        
         for i in range(start_bar, end_bar):
             trend_price = tl.price_at(i)
             
             if trend_type == 'up':
-                # ترند صاعد مكسور إذا low أقل من سعر الترند
-                if df['low'].iloc[i] < trend_price:
-                    violations += 1
+                is_violating = df['low'].iloc[i] < trend_price
             else:
-                # ترند هابط مكسور إذا high أعلى من سعر الترند
-                if df['high'].iloc[i] > trend_price:
-                    violations += 1
+                is_violating = df['high'].iloc[i] > trend_price
+            
+            if is_violating and not in_violation:
+                # بداية موجة كسر جديدة
+                waves += 1
+                in_violation = True
+            elif not is_violating and in_violation:
+                # نهاية موجة الكسر — السعر عاد
+                in_violation = False
         
-        return violations
+        return waves
     
     # ───────────────────────────────────────────────────────────────────────
     # الخطوة 3: الدعوم والمقاومات كمناطق
